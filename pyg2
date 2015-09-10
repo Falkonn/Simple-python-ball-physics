@@ -1,0 +1,186 @@
+# ********************************************** #
+#                                                #
+#  Controlls:                                    #
+#  Mouse click to spawn 1 ball                   #
+#  Scroll wheel to spawn many (one per scroll)   #
+#  Left arrowo to clear                          #
+#                                                #
+# ********************************************** #
+
+import pygame, time, random, math
+
+pygame.init()
+
+display_width = 800
+display_height = 600
+
+gameDisplay = pygame.display.set_mode((display_width,display_height))
+pygame.display.set_caption('le baguette')
+clock = pygame.time.Clock()
+
+K_LEFT = 77
+K_RIGHT = 75
+K_UP = 72
+K_DOWN = 80
+
+black = (0,0,0)
+white = (255,255,255)
+blue = (0,50,125)
+
+color = ((255,255,255),(0,0,0),(64,224,208),(34,139,34),(255,255,0),(255,0,0),(160,32,240))
+         
+numOfCircles = 1
+circleList = []
+rad = 40
+gravity = 0.30
+
+
+class Circle(object):
+    def __init__(self, cord):
+        self.cordx = cord[0]
+        self.cordy = cord[1]
+        self.rad = cord[2]
+        self.falling = True
+        self.accelerationY = 0
+        self.accelerationX = 0
+        self.bouncyness = 1
+        self.static = False
+        self.circleColor = random.randrange(0, len(color))
+
+    def draw(self):
+        pygame.draw.circle(gameDisplay, color[self.circleColor], [self.cordx,self.cordy], self.rad, 0)
+
+    #Updates x and y coordinates according to acceleration
+    def updatePos(self):
+        self.cordx += math.ceil(self.accelerationX)
+        self.cordy += math.ceil(self.accelerationY)
+
+    #Calculates the acceleration of a falling circle
+    def downwardsacceleration(self):
+        if (self.static == True):
+            self.accelerationY = 0
+        elif (self.static == False):
+            if (self.accelerationY < -50): #regulating speed -> performance reasons
+                 self.accelerationY +=gravity*(-self.accelerationY/3)
+            else:
+                self.accelerationY += gravity
+
+    #Calculates the circles behaviour when bouncing on the floor or wall.
+    def bounce(self):    
+        if (self.accelerationY < 0.00002):
+            self.static = True
+            print(self.accelerationY)
+        self.accelerationY = self.calculateInitialUpwardsaccelerationY()
+        self.downwardsacceleration()
+        if wallCollision(self.cordx):
+            self.accelerationX = -self.accelerationX
+
+    #deals with vertical collisions with other circles
+    def collisionAvoidance(self, position, collidedCircle):
+        if position == 'top':
+           self.accelerationY = self.calculateInitialUpwardsaccelerationY()
+           self.accelerationY += -collidedCircle.accelerationY/5 + 2
+           collidedCircle.accelerationY = -self.accelerationY
+
+    #deals with horizontal collisions with other circles
+    def vectoredcollisionAvoidance(self, position, collidedCircle):
+        if self.static == False:
+            if( position == 'left' ):
+                self.accelerationX = math.ceil(self.calculateInitialUpwardsaccelerationY()*0.5) + 5
+            elif( position == 'right'):
+                self.accelerationX = -math.ceil(self.calculateInitialUpwardsaccelerationY()*0.5) - 7
+        
+
+    def calculateInitialUpwardsaccelerationY(self):
+        return -self.accelerationY*self.bouncyness
+        
+def simple_physics(circle):
+    if (edge(circle.cordx,circle.cordy) and circle.static == False):
+        circle.bounce()
+        if(circle.static == True):
+            circle.accelerationX = 0
+    elif (circle.falling == True):
+        circle.downwardsacceleration()
+    
+
+    circle.updatePos()
+
+def wallCollision(cordx):
+    if cordx > display_width - rad/3 or cordx < 0:
+        return True
+    else:
+        return False
+    
+def create_circles(num, *xy):
+
+    print ('Circles created')
+    
+    for x in range(0, num):
+        if not xy:
+            x = random.randrange(0, display_width - 100)
+            y = 100
+        else:
+            x = xy[0]
+            y = xy[1]
+        circ = Circle([x,y,rad])
+        circleList.append(circ)
+
+def circle_collision(circle1,circle2):                                  
+    c = math.sqrt((circle2.cordx - circle1.cordx)**2+(circle2.cordy - circle1.cordy)**2)
+    if c <= rad:
+        return True
+    else:
+        return False
+
+def vectored_collision(circle1,circle2):
+    if(circle1.cordx - circle2.cordx > 0):
+        circle1.vectoredcollisionAvoidance('left', circle2)
+        circle2.vectoredcollisionAvoidance('right', circle1)
+    elif(circle2.cordx - circle1.cordx > 0):
+        circle2.vectoredcollisionAvoidance('left', circle1)
+        circle1.vectoredcollisionAvoidance('right', circle2)
+        
+def edge(x,y):
+        if x > display_width - rad/3 or x < 0 or y > display_height - rad/3:
+            return True
+        else:
+            return False
+    
+def game_loop():
+    gameExit = False
+
+    while not gameExit:
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                gameExit = True
+
+            if event.type == pygame.MOUSEBUTTONUP:
+                xy = pygame.mouse.get_pos()
+                create_circles(numOfCircles, xy[0], xy[1])
+
+            if event.type == pygame.KEYDOWN:
+                if event.scancode == K_LEFT: 
+                    circleList[:] = []
+
+        gameDisplay.fill(blue)
+
+        for circle in range(0, len(circleList)):
+            circleList[circle].draw()
+            simple_physics(circleList[circle])
+            if(len(circleList) > 1):
+                for collisionObject in range (circle+1, len(circleList)):
+                    if (circle_collision(circleList[collisionObject], circleList[circle]) or circle_collision(circleList[circle], circleList[collisionObject])):
+                        if circleList[collisionObject].cordy > circleList[circle].cordy:
+                            circleList[collisionObject].collisionAvoidance('top', circleList[circle])
+                            vectored_collision(circleList[circle],circleList[collisionObject])
+                        else:
+                            circleList[circle].collisionAvoidance('top', circleList[collisionObject])
+                            vectored_collision(circleList[circle],circleList[collisionObject])
+                    
+        pygame.display.update()
+        clock.tick(60)
+
+game_loop()     
+pygame.quit()
+quit()
